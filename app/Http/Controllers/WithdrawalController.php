@@ -19,26 +19,27 @@ class WithdrawalController extends Controller
             $req = $request->all();
             
             $user = User::find(auth()->user()->id);
-            $accountType = $user->account_type;
             $balance = $user->balance;
      
             if($balance < (int)$req['amount']) throw new Exception("You don't have enough balance!", 404);
-    
-            $isIndividual = $accountType === 'individual';
+            $isIndividual = $user->account_type === 'individual';
+            $isFriday = now('asia/dhaka')->dayOfWeek === 5;
      
-            $isFriday = now()->dayOfWeek === 5;
-     
-            $monthlyWithdrawals = $user->withdrawals()->whereMonth('created_at', now()->month)->sum('amount');
-    
-            $isFreeWithdrawal = $isIndividual && ($isFriday || $monthlyWithdrawals < 5000);
-     
+            
+            $monthlyWithdrawals = $user->withdrawals()
+                                        ->where('transaction_type', 'withdrawal')
+                                        ->whereMonth('created_at', now()->month)
+                                        ->sum('amount');
+
+            $isFreeWithdrawal = $isIndividual && ($isFriday || $monthlyWithdrawals <= 5000);
             $withdrawalRate = $isIndividual ? ($isFreeWithdrawal ? 0 : 0.015) : 0.025;
        
             if($withdrawalRate == 0.025){
                 $fee = $req['amount'] * ($withdrawalRate/100);
             }else{
                 $freeWithdrawalLimit = 1000;
-                if ($req['amount'] > $freeWithdrawalLimit) {
+
+                if ($req['amount'] > $freeWithdrawalLimit && !$isFreeWithdrawal) {
                     $fee = ($req['amount'] - $freeWithdrawalLimit) * ($withdrawalRate/100);
                 } else {
                     $fee = 0;
